@@ -284,26 +284,27 @@ def create_websocket_handler(runtime: Runtime) -> Any:
 
         client = StarletteSessionClient(websocket)
         session_id: str | None = None
-        user_info = _gather_user_info(websocket.headers)
-        if is_xsrf_enabled():
-            auth_cookie = websocket.cookies.get(USER_COOKIE_NAME)
-            xsrf_cookie = websocket.cookies.get(XSRF_COOKIE_NAME)
-            origin_header = websocket.headers.get("Origin")
-
-            # Validate XSRF token before parsing auth cookie:
-            if (
-                auth_cookie
-                and origin_header
-                and _validate_xsrf_token(xsrf_token, xsrf_cookie)
-            ):
-                try:
-                    user_info.update(
-                        _parse_user_cookie_signed(auth_cookie, origin_header)
-                    )
-                except Exception:  # pragma: no cover - defensive
-                    _LOGGER.exception("Error parsing auth cookie for websocket")
 
         try:
+            user_info = _gather_user_info(websocket.headers)
+            if is_xsrf_enabled():
+                auth_cookie = websocket.cookies.get(USER_COOKIE_NAME)
+                xsrf_cookie = websocket.cookies.get(XSRF_COOKIE_NAME)
+                origin_header = websocket.headers.get("Origin")
+
+                # Validate XSRF token before parsing auth cookie:
+                if (
+                    auth_cookie
+                    and origin_header
+                    and _validate_xsrf_token(xsrf_token, xsrf_cookie)
+                ):
+                    try:
+                        user_info.update(
+                            _parse_user_cookie_signed(auth_cookie, origin_header)
+                        )
+                    except Exception:  # pragma: no cover - defensive
+                        _LOGGER.exception("Error parsing auth cookie for websocket")
+
             session_id = runtime.connect_session(
                 client=client,
                 user_info=user_info,
