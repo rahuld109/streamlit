@@ -322,8 +322,8 @@ def create_websocket_handler(runtime: Runtime) -> Any:
                     # protocol and prevent ambiguity.
                     await websocket.close()
                     raise TypeError(
-                        "WebSocket text frames are not supported; "
-                        "expected binary protobufs."
+                        "WebSocket text frames are not supported; connection closed. "
+                        "Expected binary protobufs."
                     )
 
                 back_msg = BackMsg()
@@ -372,9 +372,12 @@ def create_websocket_handler(runtime: Runtime) -> Any:
             # we are handling it in the finally block.
             pass
         finally:
-            if session_id is not None:
-                runtime.disconnect_session(session_id)
-            await client.aclose()
+            try:
+                if session_id is not None:
+                    runtime.disconnect_session(session_id)
+            finally:
+                # Ensure client cleanup happens even if disconnect_session raises.
+                await client.aclose()
 
     return _websocket_endpoint
 

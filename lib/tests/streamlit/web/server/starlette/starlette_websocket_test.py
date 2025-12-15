@@ -390,7 +390,7 @@ class TestIsOriginAllowed:
             ("http://trusted.com", True),
             ("http://untrusted.com", False),
         ],
-        ids=["allowlisted", "not_in_allowlist"],
+        ids=["allowed_origins", "not_in_allowlist"],
     )
     @patch_config_options(
         {"server.enableCORS": True, "server.corsAllowedOrigins": ["http://trusted.com"]}
