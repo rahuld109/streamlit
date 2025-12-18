@@ -16,8 +16,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -28,6 +29,7 @@ from streamlit.web.server.starlette.starlette_websocket import (
     _parse_subprotocols,
     _parse_user_cookie_signed,
     _validate_xsrf_token,
+    create_websocket_handler,
 )
 from tests.testutil import patch_config_options
 
@@ -400,3 +402,91 @@ class TestIsOriginAllowed:
     ) -> None:
         """Test origin validation against explicit allowlist."""
         assert _is_origin_allowed(origin, "localhost:8501") is expected
+
+
+class TestWebsocketHandlerUserInfoPrecedence:
+    """Tests for user_info precedence in websocket handler."""
+
+    @patch_config_options(
+        {
+            "server.enableXsrfProtection": True,
+            "server.cookieSecret": "test-secret",
+            "server.trustedUserHeaders": {"X-User-Email": "email"},
+            "server.enableCORS": False,
+        }
+    )
+    def test_headers_override_cookie_values(self) -> None:
+        """Test that trusted headers override auth cookie values.
+
+        When both an auth cookie and trusted headers provide the same user info
+        key (e.g., 'email'), the header value should take precedence. This matches
+        Tornado's behavior where headers override auth cookie values.
+        """
+        from starlette.websockets import WebSocketDisconnect
+
+        # Create a valid signed cookie with email from auth provider
+        cookie_payload = json.dumps(
+            {
+                "origin": "http://localhost",
+                "is_logged_in": True,
+                "email": "cookie@example.com",
+            }
+        )
+        signed_cookie = starlette_app_utils.create_signed_value(
+            "test-secret", "_streamlit_user", cookie_payload
+        )
+        xsrf_token = starlette_app_utils.generate_xsrf_token_string()
+
+        # Mock websocket with both cookie and header providing different emails
+        mock_websocket = MagicMock()
+        mock_websocket.headers = MagicMock()
+        mock_websocket.headers.get.side_effect = lambda key: {
+            "Origin": "http://localhost",
+            "Host": "localhost:8501",
+            "sec-websocket-protocol": f"streamlit, {xsrf_token}",
+        }.get(key)
+        mock_websocket.headers.getlist.return_value = ["header@example.com"]
+        mock_websocket.cookies = MagicMock()
+        mock_websocket.cookies.get.side_effect = lambda key: {
+            "_streamlit_user": signed_cookie.decode("utf-8"),
+            "_xsrf": xsrf_token,
+        }.get(key)
+        mock_websocket.accept = AsyncMock()
+        mock_websocket.close = AsyncMock()
+        # Simulate immediate disconnect after connect_session
+        mock_websocket.receive_bytes = AsyncMock(side_effect=WebSocketDisconnect())
+
+        # Mock runtime
+        mock_runtime = MagicMock()
+        mock_runtime.connect_session = MagicMock(return_value="test-session-id")
+        mock_runtime.disconnect_session = MagicMock()
+
+        # Create handler and patch the client class
+        handler = create_websocket_handler(mock_runtime)
+        with patch(
+            "streamlit.web.server.starlette.starlette_websocket.StarletteSessionClient"
+        ) as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.aclose = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            # Also patch _validate_xsrf_token to ensure cookie parsing succeeds
+            with patch(
+                "streamlit.web.server.starlette.starlette_websocket._validate_xsrf_token",
+                return_value=True,
+            ):
+                asyncio.run(handler(mock_websocket))
+
+        # Verify connect_session was called
+        mock_runtime.connect_session.assert_called_once()
+
+        # Get the user_info that was passed to connect_session
+        call_kwargs = mock_runtime.connect_session.call_args
+        user_info = call_kwargs.kwargs.get("user_info") or call_kwargs[1].get(
+            "user_info"
+        )
+
+        # Headers should override cookie values - this is the key assertion
+        assert user_info["email"] == "header@example.com"
+        # Cookie values that aren't overridden should still be present
+        assert user_info["is_logged_in"] is True
