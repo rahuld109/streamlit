@@ -286,7 +286,7 @@ def create_websocket_handler(runtime: Runtime) -> Any:
         session_id: str | None = None
 
         try:
-            user_info = _gather_user_info(websocket.headers)
+            user_info: dict[str, str | bool | None] = {}
             if is_xsrf_enabled():
                 auth_cookie = websocket.cookies.get(USER_COOKIE_NAME)
                 xsrf_cookie = websocket.cookies.get(XSRF_COOKIE_NAME)
@@ -304,6 +304,10 @@ def create_websocket_handler(runtime: Runtime) -> Any:
                         )
                     except Exception:  # pragma: no cover - defensive
                         _LOGGER.exception("Error parsing auth cookie for websocket")
+
+            # Map in any user-configured headers. Note that these override anything
+            # coming from the auth cookie.
+            user_info.update(_gather_user_info(websocket.headers))
 
             session_id = runtime.connect_session(
                 client=client,
