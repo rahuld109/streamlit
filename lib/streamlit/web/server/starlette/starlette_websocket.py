@@ -96,31 +96,6 @@ def _gather_user_info(headers: Headers) -> dict[str, str | bool | None]:
     return user_info
 
 
-def _validate_xsrf_token(supplied_token: str | None, xsrf_cookie: str | None) -> bool:
-    """Validate the XSRF token from the WebSocket subprotocol against the cookie.
-
-    This mirrors Tornado's XSRF validation logic to ensure the frontend can share
-    XSRF logic between WebSocket handshake and HTTP uploads regardless of backend.
-    """
-
-    if not supplied_token or not xsrf_cookie:
-        return False
-
-    # Decode the supplied token from the subprotocol
-    supplied_token_bytes, _ = starlette_app_utils.decode_xsrf_token_string(
-        supplied_token
-    )
-    # Decode the expected token from the cookie
-    expected_token_bytes, _ = starlette_app_utils.decode_xsrf_token_string(xsrf_cookie)
-
-    if not supplied_token_bytes or not expected_token_bytes:
-        return False
-
-    import hmac
-
-    return hmac.compare_digest(supplied_token_bytes, expected_token_bytes)
-
-
 def _is_origin_allowed(origin: str | None, host: str | None) -> bool:
     """Check if the WebSocket Origin header is allowed.
 
@@ -300,7 +275,7 @@ def create_websocket_handler(runtime: Runtime) -> Any:
                 if (
                     auth_cookie
                     and origin_header
-                    and _validate_xsrf_token(xsrf_token, xsrf_cookie)
+                    and starlette_app_utils.validate_xsrf_token(xsrf_token, xsrf_cookie)
                 ):
                     try:
                         user_info.update(

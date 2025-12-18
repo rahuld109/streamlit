@@ -28,7 +28,6 @@ from streamlit.web.server.starlette.starlette_websocket import (
     _is_origin_allowed,
     _parse_subprotocols,
     _parse_user_cookie_signed,
-    _validate_xsrf_token,
     create_websocket_handler,
 )
 from tests.testutil import patch_config_options
@@ -186,58 +185,6 @@ class TestGatherUserInfo:
         result = _gather_user_info(headers)
 
         assert result == {"email": "first@example.com"}
-
-
-class TestValidateXsrfToken:
-    """Tests for _validate_xsrf_token function."""
-
-    def test_returns_false_when_supplied_token_none(self) -> None:
-        """Test that False is returned when supplied token is None."""
-        xsrf_cookie = starlette_app_utils.generate_xsrf_token_string()
-
-        result = _validate_xsrf_token(None, xsrf_cookie)
-
-        assert result is False
-
-    def test_returns_false_when_cookie_none(self) -> None:
-        """Test that False is returned when cookie is None."""
-        xsrf_token = starlette_app_utils.generate_xsrf_token_string()
-
-        result = _validate_xsrf_token(xsrf_token, None)
-
-        assert result is False
-
-    def test_returns_false_when_both_none(self) -> None:
-        """Test that False is returned when both are None."""
-        result = _validate_xsrf_token(None, None)
-
-        assert result is False
-
-    def test_returns_true_for_matching_tokens(self) -> None:
-        """Test that True is returned when tokens match."""
-        # Generate the same token for both (same underlying bytes)
-        xsrf_token = starlette_app_utils.generate_xsrf_token_string()
-
-        result = _validate_xsrf_token(xsrf_token, xsrf_token)
-
-        assert result is True
-
-    def test_returns_false_for_different_tokens(self) -> None:
-        """Test that False is returned when tokens differ."""
-        token1 = starlette_app_utils.generate_xsrf_token_string()
-        token2 = starlette_app_utils.generate_xsrf_token_string()
-
-        result = _validate_xsrf_token(token1, token2)
-
-        assert result is False
-
-    def test_returns_false_for_invalid_token_format(self) -> None:
-        """Test that False is returned for invalid token format."""
-        valid_token = starlette_app_utils.generate_xsrf_token_string()
-
-        result = _validate_xsrf_token("invalid-token", valid_token)
-
-        assert result is False
 
 
 class TestParseUserCookieSigned:
@@ -470,9 +417,9 @@ class TestWebsocketHandlerUserInfoPrecedence:
             mock_client.aclose = AsyncMock()
             mock_client_class.return_value = mock_client
 
-            # Also patch _validate_xsrf_token to ensure cookie parsing succeeds
+            # Also patch validate_xsrf_token to ensure cookie parsing succeeds
             with patch(
-                "streamlit.web.server.starlette.starlette_websocket._validate_xsrf_token",
+                "streamlit.web.server.starlette.starlette_app_utils.validate_xsrf_token",
                 return_value=True,
             ):
                 asyncio.run(handler(mock_websocket))
