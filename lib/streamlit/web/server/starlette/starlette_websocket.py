@@ -67,15 +67,19 @@ def _parse_subprotocols(
     - First entry: subprotocol to select (e.g., "streamlit")
     - Second entry: XSRF token for authentication validation
     - Third entry: existing session ID for reconnection
+
+    Positional semantics are preserved: empty/whitespace entries are treated as
+    None rather than being filtered out (which would shift positions).
     """
     raw = headers.get("sec-websocket-protocol")
     if not raw:
         return None, None, None
 
-    entries = [value.strip() for value in raw.split(",") if value.strip()]
-    selected = entries[0] if entries else None
-    xsrf_token = entries[1] if len(entries) >= 2 else None
-    existing_session = entries[2] if len(entries) >= 3 else None
+    # Split and strip, preserving positions (empty strings become None)
+    entries = [value.strip() for value in raw.split(",")]
+    selected = entries[0] if entries and entries[0] else None
+    xsrf_token = entries[1] if len(entries) >= 2 and entries[1] else None
+    existing_session = entries[2] if len(entries) >= 3 and entries[2] else None
     return selected, xsrf_token, existing_session
 
 

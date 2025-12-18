@@ -103,16 +103,16 @@ class TestParseSubprotocols:
         assert xsrf == "xsrf"
         assert session == "session"
 
-    def test_ignores_empty_entries(self) -> None:
-        """Test that empty entries are filtered out."""
+    def test_empty_entries_preserve_positions(self) -> None:
+        """Test that empty entries are treated as None, preserving positions."""
         headers = MagicMock()
         headers.get.return_value = "streamlit, , , session"
 
         selected, xsrf, session = _parse_subprotocols(headers)
 
         assert selected == "streamlit"
-        assert xsrf == "session"  # Second non-empty entry
-        assert session is None  # Only 2 non-empty entries
+        assert xsrf is None  # Position 1 is empty, not shifted
+        assert session is None  # Position 2 is empty, "session" is at position 3
 
 
 class TestGatherUserInfo:
